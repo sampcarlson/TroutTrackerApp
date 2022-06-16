@@ -31,8 +31,8 @@ server = function(input,output,session){
   source("init.R")
   #readRenviron(".Renviron")
   network=readRDS("network.rds")
-  
-  fishIcon=makeIcon(iconUrl="https://www.silvercreekatlas.com/wp-content/uploads/2022/04/TroutIcon.png",
+  #https://trackatrout.com/Images/TroutIcon.png
+  fishIcon=makeIcon(iconUrl="https://trackatrout.com/Images/TroutIcon.png",
                     iconWidth = 60, iconHeight = 60,
                     iconAnchorX=30,iconAnchorY = 30)
   

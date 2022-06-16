@@ -5,7 +5,9 @@ account: carlsonworks
 server: shinyapps.io
 hostUrl: https://api.shinyapps.io/v1
 appId: 6023707
-bundleId: 5768443
+bundleId: 6014763
 url: https://carlsonworks.shinyapps.io/trouttrackerapp/
-when: 1649203498.65749
-lastSyncTime: 1649203498.65749
+when: 1655402009.2883
+lastSyncTime: 1655402009.2883
+asMultiple: FALSE
+asStatic: FALSE
