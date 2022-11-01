@@ -44,7 +44,7 @@ movingmarkerDependency <- function() {
 #'                   movingOptions = movingMarkerOptions(autostart = TRUE, loop = TRUE),
 #'                   label="I am a pirate!",
 #'                   popup="Arrr")
-#'
+
 addMovingMarker = function(
     map, lng = NULL, lat = NULL, layerId = NULL, group = NULL,
     duration = 2000,
@@ -105,6 +105,7 @@ addMovingMarker = function(
 #' @references \url{https://github.com/ewoken/Leaflet.MovingMarker}
 #' @return A list of extra options for moving markers
 #' @export
+
 movingMarkerOptions <- function(autostart = FALSE, loop = FALSE,
                                 pauseOnZoom = FALSE) {
   list(
