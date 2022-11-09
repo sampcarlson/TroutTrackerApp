@@ -14,9 +14,9 @@ ui=fluidPage(
   fluidRow(
     column(width=3,
            selectInput(
-             inputId="fishID",
+             inputId="fishHID",
              label="fish",
-             choices=allFish,
+             choices=availableFish$l4hex,
              selected=NULL,
              multiple = TRUE
            ),
@@ -57,7 +57,7 @@ server = function(input,output,session){
   network=readRDS("network.rds")
   
   #fishData=reactive(getFishData_interval(input$dateTime,daysPerStep,whichFish=input$fishID))
-  fishData=reactive(getFishData(input$dateTime[1],input$dateTime[2],whichFish=input$fishID))
+  #fishData=reactive(getFishData(input$dateTime[1],input$dateTime[2],fishHIDs=input$fishHID))
   
   
   #clockStartTime = reactiveVal(Sys.time())
@@ -89,13 +89,15 @@ server = function(input,output,session){
     #observe({
     clockStartTime <<- Sys.time()
     
-    showFish=as.character(unique(fishData()$fishid))
+    fishData=getFishData(input$dateTime[1],input$dateTime[2],fishHIDs=input$fishHID)
+    print(fishData)
+    showFish=as.character(unique(fishData$fishid))
     scMap= leafletProxy("scMap",deferUntilFlush = T)
     scMap = clearGroup(map=scMap,"activeFish")
     days=input$dateTime[2]-input$dateTime[1]
     
     for(fish in showFish){
-      scMap = addMovingMarker(map=scMap,data=fishData()[fishData()$fishid==fish,],
+      scMap = addMovingMarker(map=scMap,data=fishData[fishData$fishid==fish,],
                               layerId=showFish,
                               group="activeFish",
                               icon=fishIcon,

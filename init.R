@@ -9,6 +9,9 @@ library(DBI)
 
 source("movingMarkerFunctions.R")
 
+userRole="user"
+#userRole="superuser"
+
 scdbConnect=function(){
   #readRenviron(".Renviron")
   conn=dbConnect(RPostgres::Postgres(),
@@ -38,11 +41,21 @@ maxDateTime=as.Date(dbGetQuery(conn,"SELECT MAX (datetime) FROM fishlocations;")
 #fishData=st_read(dsn=conn,query=q)
 
 
-getFishData=function(startDateTime,stopDateTime,whichFish){
+getFishData=function(startDateTime,stopDateTime,fishIDs=NULL,fishHIDs=NULL,availFish=availableFish){
+  print(fishIDs)
+  print(fishHIDs)
+  if(is.null(fishIDs) & !is.null(fishHIDs)){
+    fishIDs=availFish[availFish$l4hex %in% fishHIDs,]
+  }
+  
+  whichFish = fishIDs[fishIDs$idx %in% availFish$idx,"idx"]
+  print(whichFish)
+  
   if(length(whichFish)>0){
     q=paste0("SELECT * FROM fishlocations WHERE fishlocations.datetime > '",startDateTime,
              "' AND fishlocations.datetime < '",stopDateTime,
              "' AND fishlocations.fishid IN ('",paste0(whichFish,collapse="', '"),"');")
+    print(q)
     fishData=st_read(dsn=conn,query=q)
     return(fishData)
   } else { return(NULL) }
@@ -61,11 +74,13 @@ getFishData_interval=function(startDateTime,intervalDays,whichFish){
   
 }
 
+dbGetQuery(conn,"SELECT * FROM fishlocations LIMIT 5;")
 
-allFish=dbGetQuery(conn,"SELECT DISTINCT fishid FROM fishlocations;")$fishid
+#get fishdetails once and handle locally
+fishDetails=dbGetQuery(conn,"SELECT * FROM fishdetails;")
 
 
-#fishData=getFishData(minDateTime,maxDateTime,1:10)
+#fishData=getFishData(minDateTime,maxDateTime,fishDetails$idx[1])
 
 getSimTime=function(clockStartTime,simStartTime,simEndTime,secPerDay){
   
@@ -85,23 +100,23 @@ getSimTime=function(clockStartTime,simStartTime,simEndTime,secPerDay){
 
 clockStartTime=""
 
-getFishLabel=function(fishid){
-  allAttributes=dbGetQuery(conn,paste0("SELECT * FROM fishattributes WHERE fishid = '",fishid,"';"))
-  if(nrow(allAttributes)==0){
-    return(paste0("Fish# ",fishid))
-  }else if(sum(complete.cases(allAttributes))>=1){
-    print(allAttributes)
-    allAttributes=allAttributes[complete.cases(allAttributes),]
-    allAttributes=allAttributes[1,]
-  }else {
-    allAttributes=allAttributes[1,]
-  }
+getFishLabel=function(fishid,fishDeets=fishDetails){
+  #allAttributes=dbGetQuery(conn,paste0("SELECT * FROM fishattributes WHERE fishid = '",fishid,"';"))
+  allAttributes=fishDeets[fishDeets$idx==fishid,]
+  
   allAttributes[is.na(allAttributes)]=" "
-  attributeString=paste0("Fish ", allAttributes$fishid,"\n",allAttributes$length,'" ' ,allAttributes$species )
+  attributeString=paste0("Fish ", allAttributes$l4hex,"\n",allAttributes$Length.Inches,'" ' ,allAttributes$Species )
   return(attributeString)
+  
 }
 
-
-
+getAvailableFish=function(role="user",fishDeets=fishDetails){
+  if(role=="superuser"){
+    return(fishDeets[,c("idx","hexID","l4hex")])
+  }else {
+    return(fishDeets[1:10,c("idx","hexID","l4hex")])
+  }
+}
+availableFish=getAvailableFish(role=userRole)
 
 #rsconnect::deployApp()
