@@ -1,16 +1,15 @@
 library(shiny)
-
+library(DT)
 source("init.R")
 
 #todo:
 # check that getting species info from other data sources -< fgdata species
-# kml w/ links in popups (and select w/ kml)
-# pause button - click on map or fish to pause
-# use DT selectable table
-# change date range to reflect selected fish
-# cold phone gps location bug - snap tolerance - snap to next point instead
 
-#addmovingMarker allows numeric layerId, while removeMarker suggests(requires?) character
+# check cold phone gps location bug - snap tolerance - snap to next point instead
+# Data Import side:  add single day locations for single observation fish
+#bug: addmovingMarker allows numeric layerId, while removeMarker suggests(requires?) character
+#usgs logger link
+#timer issues
 
 
 #user interface
@@ -24,22 +23,22 @@ ui=fluidPage(
   fluidRow(
     column(width=2,
            textInput(inputId="userName",
-                     label="User Name",
-                     placeholder = "Enter your last name")
+                     label=NULL,
+                     placeholder = "User Name or Last Name")
            
     ),
-    column(width=3,
-           selectInput(
-             inputId="selectFish",
-             label="fish",
-             choices=availableFish$l4hex,
-             selected=NULL,
-             multiple = TRUE
-           )
-    ),
+    # column(width=3,
+    #        selectInput(
+    #          inputId="selectFish",
+    #          label="fish",
+    #          choices=availableFish$l4hex,
+    #          selected=NULL,
+    #          multiple = TRUE
+    #        )
+    # ),
     column(width=3,
            dateRangeInput(inputId = 'dateTime',
-                          label = "Date Range",
+                          label = NULL,
                           start = minDateTime,
                           end = maxDateTime,
                           min = minDateTime,
@@ -58,33 +57,40 @@ ui=fluidPage(
            #             #animate = animationOptions(interval=msPerDay*daysPerStep)
            # ),
     ),
-    column(width=3,
-           actionButton("startFish","Start",style="position: relative; top: 22px; right: 20px;"),
-           div(style="position: relative; top: -2px; left: 50px;",
-               textOutput("simTime"),
-           ) 
-           
-    ),
+    # column(width=2,
+    #        actionButton("startFish","Start",style="position: relative; top: 22px; right: 20px;"),
+    #        div(style="position: relative; top: -2px; left: 50px;",
+    #            textOutput("simTime"),
+    #        ) 
+    #),
+    column(width=1, actionButton("startFish","Start")),
+    column(width=2,div(style="position: relative; top: 6px;",textOutput("simTime"))),
+    
+    
     # column(width=2,
     #        div(style="position: relative; top: 25px; right: 30px;",
     #            textOutput("simTime"),
     #        )     
     # )
+    column(2,checkboxInput("temperatureLoggers","Temperature Sites")),
+    column(2,checkboxInput("DOLoggers","Dissolved Oxygen Sites"))
   ),
   fluidRow(
-    column(3,textOutput("nameReport")),
-    column(4,checkboxInput("temperatureLoggers","Display Temperature Loggers"))
+    column(3,textOutput("nameReport"))
+    
+    
   ),
   
   fluidRow(
     column(12,align="center",
-           leafletOutput("scMap",width="100%",height=500)
+           leafletOutput("scMap",width="90%",height=500)
     )
   ),
+  br(),
   fluidRow(
     column(12,
-           div(style="height:300px; overflow: scroll",
-               tableOutput("availableFishTable")
+           div(style="height:350px; overflow: scroll",
+               DTOutput("fishTable")
            )
     )
   )
@@ -94,11 +100,16 @@ ui=fluidPage(
 
 server = function(input,output,session){
   source("init.R")
-  #readRenviron(".Renviron")
-  #network=readRDS("network.rds")
   
-  #availableFish=reactive({ getAvailableFish(input$userName) })
+  clockStartTime=""
+  paused=F
   
+  startPauseTime=Sys.time()
+  endPauseTime=Sys.time()
+  pausedTime=0
+  
+  
+  ########---------- get available fish from username-----------
   observeEvent(input$userName,{
     
     
@@ -118,11 +129,11 @@ server = function(input,output,session){
     }
     printFish=availableFish[,c("l4hex","firstObserved","lastObserved","obsCount","Species","Length.Inches","routeLength_km")]
     names(printFish)=c("Fish ID","First Observed", "Last Observed", "# of Observations", "Species", "Length (in)", "Travel Distance (km)")
-    printFish$`# of Observations`=as.character( printFish$`# of Observations` )
-    printFish$`Length (in)` = as.character(printFish$`Length (in)`)
+    #printFish$`# of Observations`=as.character( printFish$`# of Observations` )
+    #printFish$`Length (in)` = as.character(printFish$`Length (in)`)
     printFish$`Travel Distance (km)`=round(printFish$`Travel Distance (km)`,1)
     
-    output$availableFishTable=renderTable({printFish},sanitize.text.function=function(x){x})
+    output$fishTable=renderDT({printFish},rownames=F,options=list(paging=F,searching=F))
     
     updateSelectInput(inputId="selectFish",choices=unique(availableFish$l4hex))
     #print(unique(availableFish$l4hex))
@@ -131,38 +142,13 @@ server = function(input,output,session){
     
   })
   
-  observeEvent(input$selectFish,{
-    
-    ############# ne workez pas -----------
-    minFishDate=fishDetails$firstObserved[fishDetails$hexID %in% input$selectFish]
-    maxFishDate=fishDetails$lastObserved[fishDetails$hexID %in% input$selectFish]
-    updateDateRangeInput(inputId="dateTime",
-                         min=minFishDate,
-                         max=maxFishDate)
-  })
-  
-  #fishData=reactive(getFishData_interval(input$dateTime,daysPerStep,whichFish=input$fishID))
-  #fishData=reactive(getFishData(input$dateTime[1],input$dateTime[2],selectFishs=input$selectFish))
-  
-  
-  #clockStartTime = reactiveVal(Sys.time())
-  #simTime=reactive(getSimTime(clockStartTime,simStartTime=input$dateTime[1],simEndTime=input$dateTime[2], secPerDay = secPerDay))
-  
-  
-  #https://trackatrout.com/Images/TroutIcon.png
-  
-  
+  #############-------- build map --------------------
   scMap = leaflet( leafletOptions(leafletCRS(crsClass="L.CRS.EPSG4326")) )
-  
   scMap = setView(map=scMap,lng=-114.15,lat=43.33,zoom=12)
-  
-  # scMap = addWMSTiles(map=scMap,baseUrl="https://basemap.nationalmap.gov/arcgis/services/USGSImageryOnly/MapServer/WmsServer",
-  #                     layers=0,
-  #                     attribution = 'Tiles courtesy of the <a href="https://usgs.gov/">U.S. Geological Survey</a>',
-  #                     tileOptions(zIndex=1)) #can set maxZoom in tileOptions
-  
   scMap=addProviderTiles(map=scMap,provider = providers$Esri.WorldImagery)
-  
+  scMap=addAwesomeMarkers(scMap,lng=-114.1087,lat=43.32217,
+                          icon=DOLoggerIcon,
+                          popup='<a href="https://waterdata.usgs.gov/monitoring-location/13150430/#parameterCode=00065&period=P30D"> USGS Streamflow Data')
   #scMap = addPolylines(map=scMap,opacity=1,data=network,weight=1,smoothFactor = 2,label=network$GNIS_Name)
   
   # scMap = addMarkers(map=scMap,lng=st_coordinates(lng=add_loggers[,"X"]),lat= )
@@ -177,14 +163,26 @@ server = function(input,output,session){
   
   output$scMap = renderLeaflet(scMap)
   
-  
+  ###########----------------start fish animation------------------
   observeEvent(input$startFish,{
+    pausedTime <<- 0
     
-    #observe({
-    # clockStartTime <<- Sys.time()
-    
-    fishData <<- getFishData(input$dateTime[1],input$dateTime[2],fishHIDs=input$selectFish)
-    
+    thisFishIdx=availableFish[input$fishTable_rows_selected,"idx"]
+    try({
+      if(length(thisFishIdx)>10){
+        thisFishIdx=thisFishIdx[1:10]
+      }
+      
+      fishData <<- getFishData(input$dateTime[1],input$dateTime[2],fishIDs=thisFishIdx)
+      
+      if(nrow(fishData)>1){
+        startTime=as.Date(min(fishData$datetime))
+        endTime=as.Date(max(fishData$datetime))
+        updateDateRangeInput(inputId="dateTime",
+                             start=startTime,
+                             end=endTime+1)
+      }
+    })
     addRemoveFishKey <<- fishDetails[fishDetails$idx %in% unique(fishData$fishid),c("idx","l4hex","firstObserved","lastObserved","Species","Length.Inches")]
     addRemoveFishKey$firstDay <<- as.Date(addRemoveFishKey$firstObserved)
     addRemoveFishKey$lastDay <<- as.Date(addRemoveFishKey$lastObserved)
@@ -219,17 +217,16 @@ server = function(input,output,session){
     
   })
   
+  ###########-------- timekeeper, including adding and removing fish due to first/last observation ----------------
   observe({
     simTime=reactive(getSimTime(clockStartTime,simStartTime=input$dateTime[1],simEndTime=input$dateTime[2], secPerDay = secPerDay))
     
-    #thisSimTime=getSimTime(clockStartTime,simStartTime=input$dateTime[1],simEndTime=input$dateTime[2], secPerDay = secPerDay)
-    
     invalidateLater(250)
     
-    
     thisSimTime=simTime()
-    output$simTime=renderText({thisSimTime})
-    
+    if(paused==F){
+      output$simTime=renderText({thisSimTime})
+    }
     
     if(thisSimTime %in% as.character(addRemoveFishKey$firstDay)){
       
@@ -266,7 +263,7 @@ server = function(input,output,session){
                  layerId=removeFishData$fishid,
                  group="activeFish",
                  icon=fishIcon,
-                 popup=getFishLabel(removeFishData$fishid),
+                 label=sapply(removeFishData$fishid,getFishLabel),
                  options=markerOptions(opacity=.65))
       
       
@@ -274,6 +271,54 @@ server = function(input,output,session){
     }
   })
   
+  ###########-------pause or unpause on click------------------
+  observeEvent(input$scMap_click,{
+    scMap= leafletProxy("scMap",deferUntilFlush = T)
+    if(paused){
+      resumeMoving(scMap)
+      paused <<- F
+      endPauseTime <<- Sys.time()
+      pausedTime <<- pausedTime + round(as.numeric(difftime(endPauseTime,startPauseTime,units="secs")),3)
+    } else {
+      pauseMoving(scMap) 
+      paused <<- T
+      startPauseTime <<- Sys.time()
+    }
+    
+  })
+  
+  
+  ############---------- add/remove Temperature sites--------
+  observeEvent(input$temperatureLoggers,{
+    scMap= leafletProxy("scMap",deferUntilFlush = T)
+    if(input$temperatureLoggers==T){
+      scMap=addAwesomeMarkers(map=scMap,
+                              data=temperatureLoggers,
+                              icon=TempLoggerIcon,
+                              group = "loggerIcons",
+                              layerId = temperatureLoggers$Name,
+                              popup = as.character(temperatureLoggers$Description))
+    } else {
+      scMap=removeMarker(scMap,temperatureLoggers$Name)
+    }
+    #can set min/max zoom levels with groupOptions
+  })
+  
+  ############---------- add/remove DO sites--------
+  observeEvent(input$DOLoggers,{
+    scMap= leafletProxy("scMap",deferUntilFlush = T)
+    if(input$DOLoggers==T){
+      scMap=addAwesomeMarkers(map=scMap,
+                              data=DOLoggers,
+                              icon=DOLoggerIcon,
+                              group = "loggerIcons",
+                              layerId = DOLoggers$Name,
+                              popup = as.character(DOLoggers$Description))
+    } else {
+      scMap=removeMarker(scMap,DOLoggers$Name)
+    }
+    
+  })
   
 } 
 # Run the application 
