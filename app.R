@@ -1,6 +1,4 @@
-library(shiny)
-library(DT)
-source("init.R")
+source("global.R")
 
 #todo:
 # check that getting species info from other data sources -< fgdata species
@@ -99,14 +97,24 @@ ui=fluidPage(
 #server side - update, manage, backup, and serve database
 
 server = function(input,output,session){
-  source("init.R")
+  source("serverFunctions.R",local = T)
+  
+#######################---------------local functions---------------------  
   
   clockStartTime=""
-  paused=F
-  
+  paused=T
   startPauseTime=Sys.time()
   endPauseTime=Sys.time()
   pausedTime=0
+  
+  validName=T
+  availableFish=getAvailableFish("")
+  addRemoveFishKey = data.frame(idx=118,l4hex="80FB",Species="Brown Trout", Length.Inches=5.5, firstDay=as.Date("2022-04-28"),lastDay=as.Date("2022-05-11"),days=13)
+  addRemoveFishKey=addRemoveFishKey[0,]
+  
+  
+  
+  #availableFish=reactive({getAvailableFish(name=tolower(input$userName),fishDeets = fishDetails)})
   
   
   ########---------- get available fish from username-----------
@@ -147,8 +155,8 @@ server = function(input,output,session){
   scMap = setView(map=scMap,lng=-114.15,lat=43.33,zoom=12)
   scMap=addProviderTiles(map=scMap,provider = providers$Esri.WorldImagery)
   scMap=addAwesomeMarkers(scMap,lng=-114.1087,lat=43.32217,
-                          icon=DOLoggerIcon,
-                          popup='<a href="https://waterdata.usgs.gov/monitoring-location/13150430/#parameterCode=00065&period=P30D"> USGS Streamflow Data')
+                          icon=FlowIcon,
+                          popup='<a href="https://waterdata.usgs.gov/monitoring-location/13150430/#parameterCode=00065&period=P30D" target="_blank"> USGS Streamflow Data')
   #scMap = addPolylines(map=scMap,opacity=1,data=network,weight=1,smoothFactor = 2,label=network$GNIS_Name)
   
   # scMap = addMarkers(map=scMap,lng=st_coordinates(lng=add_loggers[,"X"]),lat= )
@@ -165,7 +173,6 @@ server = function(input,output,session){
   
   ###########----------------start fish animation------------------
   observeEvent(input$startFish,{
-    pausedTime <<- 0
     
     thisFishIdx=availableFish[input$fishTable_rows_selected,"idx"]
     try({
@@ -173,7 +180,8 @@ server = function(input,output,session){
         thisFishIdx=thisFishIdx[1:10]
       }
       
-      fishData <<- getFishData(input$dateTime[1],input$dateTime[2],fishIDs=thisFishIdx)
+      fishData <<- getFishData(input$dateTime[1],input$dateTime[2],fishIDs=thisFishIdx,availFish = availableFish)
+      #print(fishData)
       
       if(nrow(fishData)>1){
         startTime=as.Date(min(fishData$datetime))
@@ -212,62 +220,62 @@ server = function(input,output,session){
                               options = markerOptions(zIndexOffset = 1000)
       )
     }
-    
-    clockStartTime <<- Sys.time()
+    resetClock()
+    paused <<- F
+    #clockStartTime <<- Sys.time()
     
   })
   
   ###########-------- timekeeper, including adding and removing fish due to first/last observation ----------------
   observe({
-    simTime=reactive(getSimTime(clockStartTime,simStartTime=input$dateTime[1],simEndTime=input$dateTime[2], secPerDay = secPerDay))
+    invalidateLater(secPerDay*1000/2)#two cycles per day to try to catch all the fish events
     
-    invalidateLater(250)
-    
-    thisSimTime=simTime()
     if(paused==F){
-      output$simTime=renderText({thisSimTime})
-    }
-    
-    if(thisSimTime %in% as.character(addRemoveFishKey$firstDay)){
+      simTime=getSimTime(clockStartTime,simStartTime=input$dateTime[1],simEndTime=input$dateTime[2], secPerDay = secPerDay, pauseOffset = pausedTime)
       
-      thisAddFish=addRemoveFishKey[as.character(addRemoveFishKey$firstDay)==thisSimTime,]
-      scMap= leafletProxy("scMap",deferUntilFlush = T)
-      
-      for(fish in thisAddFish$idx){
-        scMap = addMovingMarker(map=scMap,data=fishData[fishData$fishid==fish,],
-                                layerId=as.character(fish),
-                                group="activeFish",
-                                icon=fishIcon,
-                                label=getFishLabel(fish),
-                                duration=(secPerDay*1000)*thisAddFish$days[thisAddFish$idx==fish],
-                                movingOptions = movingMarkerOptions(autostart = T, loop = FALSE),
-                                options = markerOptions(zIndexOffset = 1000)
-        ) 
+      output$simTime=renderText({simTime})
+         
+      if(simTime %in% as.character(addRemoveFishKey$firstDay)){
+        
+        thisAddFish=addRemoveFishKey[as.character(addRemoveFishKey$firstDay)==simTime,]
+        scMap= leafletProxy("scMap",deferUntilFlush = T)
+        
+        for(fish in thisAddFish$idx){
+          scMap = addMovingMarker(map=scMap,data=fishData[fishData$fishid==fish,],
+                                  layerId=as.character(fish),
+                                  group="activeFish",
+                                  icon=fishIcon,
+                                  label=getFishLabel(fish),
+                                  duration=(secPerDay*1000)*thisAddFish$days[thisAddFish$idx==fish],
+                                  movingOptions = movingMarkerOptions(autostart = T, loop = FALSE),
+                                  options = markerOptions(zIndexOffset = 1000)
+          ) 
+        }
       }
-    }
-    
-    #end of a fish movement
-    if(thisSimTime %in% as.character(addRemoveFishKey$lastDay)){
       
-      thisRemoveFish=addRemoveFishKey[as.character(addRemoveFishKey$lastDay)==thisSimTime,]
-      scMap= leafletProxy("scMap",deferUntilFlush = T)
-      
-      removeFishData=fishData[order(fishData$datetime,decreasing = T),]
-      removeFishData=removeFishData[!duplicated(removeFishData$fishid),]
-      removeFishData=removeFishData[removeFishData$fishid %in% thisRemoveFish$idx,]
-      
-      removeMarker(map=scMap,layerId = as.character(removeFishData$fishid))
-      
-      addMarkers(map=scMap,
-                 data=removeFishData,
-                 layerId=removeFishData$fishid,
-                 group="activeFish",
-                 icon=fishIcon,
-                 label=sapply(removeFishData$fishid,getFishLabel),
-                 options=markerOptions(opacity=.65))
-      
-      
-      
+      #end of a fish movement
+      if(simTime %in% as.character(addRemoveFishKey$lastDay)){
+        
+        thisRemoveFish=addRemoveFishKey[as.character(addRemoveFishKey$lastDay)==simTime,]
+        scMap= leafletProxy("scMap",deferUntilFlush = T)
+        
+        removeFishData=fishData[order(fishData$datetime,decreasing = T),]
+        removeFishData=removeFishData[!duplicated(removeFishData$fishid),]
+        removeFishData=removeFishData[removeFishData$fishid %in% thisRemoveFish$idx,]
+        
+        removeMarker(map=scMap,layerId = as.character(removeFishData$fishid))
+        
+        addMarkers(map=scMap,
+                   data=removeFishData,
+                   layerId=removeFishData$fishid,
+                   group="activeFish",
+                   icon=fishIcon,
+                   label=sapply(removeFishData$fishid,getFishLabel),
+                   options=markerOptions(opacity=.65))
+        
+        
+        
+      }
     }
   })
   
