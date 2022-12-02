@@ -12,7 +12,7 @@ source("global.R")
 
 #user interface
 #depends on server side to provide current database
-secPerDay=.25
+secPerDay=.3
 
 
 
@@ -99,7 +99,7 @@ ui=fluidPage(
 server = function(input,output,session){
   source("serverFunctions.R",local = T)
   
-#######################---------------local functions---------------------  
+  #######################---------------local functions---------------------  
   
   clockStartTime=""
   paused=T
@@ -156,7 +156,7 @@ server = function(input,output,session){
   scMap=addProviderTiles(map=scMap,provider = providers$Esri.WorldImagery)
   scMap=addAwesomeMarkers(scMap,lng=-114.1087,lat=43.32217,
                           icon=FlowIcon,
-                          popup='<a href="https://waterdata.usgs.gov/monitoring-location/13150430/#parameterCode=00065&period=P30D" target="_blank"> USGS Streamflow Data')
+                          popup='<a href="https://waterdata.usgs.gov/monitoring-location/13150430/#parameterCode=00065&period=P30D" target="_blank"> USGS Streamflow Data</a>')
   #scMap = addPolylines(map=scMap,opacity=1,data=network,weight=1,smoothFactor = 2,label=network$GNIS_Name)
   
   # scMap = addMarkers(map=scMap,lng=st_coordinates(lng=add_loggers[,"X"]),lat= )
@@ -234,7 +234,7 @@ server = function(input,output,session){
       simTime=getSimTime(clockStartTime,simStartTime=input$dateTime[1],simEndTime=input$dateTime[2], secPerDay = secPerDay, pauseOffset = pausedTime)
       
       output$simTime=renderText({simTime})
-         
+      
       if(simTime %in% as.character(addRemoveFishKey$firstDay)){
         
         thisAddFish=addRemoveFishKey[as.character(addRemoveFishKey$firstDay)==simTime,]
@@ -245,7 +245,7 @@ server = function(input,output,session){
                                   layerId=as.character(fish),
                                   group="activeFish",
                                   icon=fishIcon,
-                                  label=getFishLabel(fish),
+                                  label=as.character(getFishLabel(fish)),
                                   duration=(secPerDay*1000)*thisAddFish$days[thisAddFish$idx==fish],
                                   movingOptions = movingMarkerOptions(autostart = T, loop = FALSE),
                                   options = markerOptions(zIndexOffset = 1000)
@@ -265,15 +265,19 @@ server = function(input,output,session){
         
         removeMarker(map=scMap,layerId = as.character(removeFishData$fishid))
         
+        Sys.sleep(.1)
+        
+        for(i in 1:nrow(removeFishData)){
+        
         addMarkers(map=scMap,
-                   data=removeFishData,
-                   layerId=removeFishData$fishid,
+                   data=removeFishData[i,],
+                   layerId=removeFishData$fishid[i],
                    group="activeFish",
                    icon=fishIcon,
-                   label=sapply(removeFishData$fishid,getFishLabel),
+                   label=as.character(getFishLabel(removeFishData$fishid[i])),
                    options=markerOptions(opacity=.65))
         
-        
+        }
         
       }
     }
@@ -300,12 +304,15 @@ server = function(input,output,session){
   observeEvent(input$temperatureLoggers,{
     scMap= leafletProxy("scMap",deferUntilFlush = T)
     if(input$temperatureLoggers==T){
-      scMap=addAwesomeMarkers(map=scMap,
-                              data=temperatureLoggers,
-                              icon=TempLoggerIcon,
-                              group = "loggerIcons",
-                              layerId = temperatureLoggers$Name,
-                              popup = as.character(temperatureLoggers$Description))
+      for(i in 1:nrow(temperatureLoggers)){
+        scMap=addAwesomeMarkers(map=scMap,
+                                data=temperatureLoggers[i,],
+                                icon=TempLoggerIcon,
+                                group = "loggerIcons",
+                                layerId = temperatureLoggers$Name[i],
+                                popup = HTML(TempDescription[i])
+        )
+      }
     } else {
       scMap=removeMarker(scMap,temperatureLoggers$Name)
     }
@@ -316,12 +323,15 @@ server = function(input,output,session){
   observeEvent(input$DOLoggers,{
     scMap= leafletProxy("scMap",deferUntilFlush = T)
     if(input$DOLoggers==T){
-      scMap=addAwesomeMarkers(map=scMap,
-                              data=DOLoggers,
-                              icon=DOLoggerIcon,
-                              group = "loggerIcons",
-                              layerId = DOLoggers$Name,
-                              popup = as.character(DOLoggers$Description))
+      for(i in 1:nrow (DOLoggers))
+        scMap=addAwesomeMarkers(map=scMap,
+                                data=DOLoggers[i,],
+                                icon=DOLoggerIcon,
+                                group = "loggerIcons",
+                                layerId = DOLoggers$Name[i],
+                                #popup='Temperature Data for Lower Silver Creek at Highway 93 #1<br /> <a href="https://savesilvercreek.org/data-for-1-highway-93">Logger Data Page'
+                                popup = HTML(DODescription[i])
+        )
     } else {
       scMap=removeMarker(scMap,DOLoggers$Name)
     }
