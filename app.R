@@ -176,8 +176,8 @@ server = function(input,output,session){
     
     thisFishIdx=availableFish[input$fishTable_rows_selected,"idx"]
     try({
-      if(length(thisFishIdx)>10){
-        thisFishIdx=thisFishIdx[1:10]
+      if(length(thisFishIdx)>5){
+        thisFishIdx=thisFishIdx[1:5]
       }
       
       fishData <<- getFishData(input$dateTime[1],input$dateTime[2],fishIDs=thisFishIdx,availFish = availableFish)

@@ -78,8 +78,9 @@ getAvailableFish=function(name="",fishDeets=fishDetails){
     #print(fishIDs)
     outdf=fishDeets[fishDeets$idx %in% fishIDs,]
   } else {
+    outdf=fishDeets[order(fishDeets$routeLength_km,decreasing=T),]
     #fishDeets=fishDeets[order(fishDeets$lastObserved,decreasing=T),]
-    outdf=fishDeets[1:5,]
+    outdf=outdf[1:10,]
   }
   outdf$firstObserved=as.character(as.Date(outdf$firstObserved))
   outdf$lastObserved=as.character(as.Date(outdf$lastObserved))
